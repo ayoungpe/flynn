@@ -113,8 +113,11 @@ func handleJob(job *que.Job) (e error) {
 	events := make(chan deployer.DeploymentEvent)
 	defer close(events)
 	go func() {
-		for e := range events {
-			sendDeploymentEvent(e)
+		for ev := range events {
+			ev.DeploymentID = deployment.ID
+			if err := sendDeploymentEvent(ev); err != nil {
+				log.Fatal(err)
+			}
 		}
 	}()
 	if err := strategyFunc(client, deployment, events); err != nil {
@@ -123,6 +126,13 @@ func handleJob(job *que.Job) (e error) {
 	}
 	if err := client.SetAppRelease(deployment.AppID, deployment.NewReleaseID); err != nil {
 		return err
+	}
+	// signal success
+	if err := sendDeploymentEvent(deployer.DeploymentEvent{
+		DeploymentID: deployment.ID,
+		ReleaseID:    "",
+	}); err != nil {
+		log.Fatal(err)
 	}
 	return nil
 }
